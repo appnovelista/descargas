@@ -1,0 +1,25 @@
+name: Traer una versión
+on:
+  workflow_dispatch:
+    inputs:
+      origen:
+        required: true
+      tag:
+        required: true
+permissions:
+  contents: write
+jobs:
+  traer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Traer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORIGEN: ${{ inputs.origen }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir f
+          gh release download "$TAG" -R "$ORIGEN" -D f
+          gh api "repos/$ORIGEN/releases/tags/$TAG" --jq .body > notas.md
+          TITULO=$(gh api "repos/$ORIGEN/releases/tags/$TAG" --jq .name)
+          gh release create "$TAG" f/* -R "$GITHUB_REPOSITORY" --title "$TITULO" --notes-file notas.md --latest

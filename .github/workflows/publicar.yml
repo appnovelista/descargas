@@ -1,0 +1,33 @@
+# Publica el borrador de la versión (lo deja como la última), para que funcionen las descargas de
+# appnovelista.com/descargas/... y las actualizaciones automáticas de la app.
+# Solo, el día del lanzamiento: jueves 19-nov-2026 a las 08:30 UTC (09:30 en Madrid; la web enseña los botones a las
+# 10:00). También a mano: Actions › «Publicar la versión» › Run workflow.
+name: Publicar la versión
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Versión a publicar (por ejemplo v1.0.14). Vacío = el borrador más reciente.'
+        required: false
+  schedule:
+    - cron: '30 8 19 11 *'
+permissions:
+  contents: write
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publicar el borrador
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -z "$TAG" ]; then
+            # Nunca un ensayo: solo borradores cuya versión no lleve «ensayo» (los de prueba del flujo se llaman vX.Y.Z-ensayo).
+            TAG=$(gh release list --limit 20 --json tagName,isDraft --jq '[.[] | select(.isDraft and (.tagName | test("ensayo") | not))][0].tagName // ""')
+          fi
+          if [ -z "$TAG" ]; then echo "No hay ningún borrador que publicar."; exit 0; fi
+          case "$TAG" in *ensayo*) echo "$TAG es un ensayo: no se publica."; exit 1;; esac
+          gh release edit "$TAG" --draft=false --latest
+          gh release view "$TAG" --json tagName,isDraft,assets --jq '"Publicada " + .tagName + " con " + (.assets | length | tostring) + " ficheros"'
