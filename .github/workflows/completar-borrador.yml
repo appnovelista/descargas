@@ -1,0 +1,43 @@
+# 20-nov-2026: completa un borrador a medias (la subida desde el Mac se cortó con mala conexión) sin volver a subir nada
+# desde fuera: copia aquí, en GitHub, los instaladores con número a sus nombres fijos (los de los botones de la web) y trae
+# los .blockmap de la versión anterior (las actualizaciones que solo bajan lo que cambia). No publica: eso es «Publicar la versión».
+name: Completar borrador
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Borrador a completar (por ejemplo v1.0.40)'
+        required: true
+      anterior:
+        description: 'Versión publicada de la que traer los .blockmap (por ejemplo v1.0.39)'
+        required: true
+permissions:
+  contents: write
+jobs:
+  completar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copiar y subir lo que falta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          ANT: ${{ inputs.anterior }}
+        run: |
+          set -eu
+          V="${TAG#v}"
+          [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ] || { echo "$TAG no es un borrador"; exit 1; }
+          mkdir -p f && cd f
+          hay=$(gh release view "$TAG" --json assets --jq '[.assets[].name] | join(" ")')
+          copia() { case " $hay " in *" $2 "*) echo "ya está: $2";; *) gh release download "$TAG" -p "$1" && mv "$1" "$2" && gh release upload "$TAG" "$2" && echo "subido: $2";; esac; }
+          copia "NoveLista-$V-universal.dmg" NoveLista.dmg
+          copia "NoveLista-Setup-$V.exe" NoveLista-Setup.exe
+          copia "NoveLista-$V-x86_64.AppImage" NoveLista.AppImage
+          copia "NoveLista-$V-arm64.AppImage" NoveLista-arm64.AppImage
+          copia "NoveLista-$V-amd64.deb" NoveLista.deb
+          for b in $(gh release view "$ANT" --json assets --jq '.assets[].name | select(endswith(".blockmap"))'); do
+            case "$b" in *"-$V-"*|*"-$V.exe"*) continue;; esac
+            case " $hay " in *" $b "*) echo "ya está: $b"; continue;; esac
+            gh release download "$ANT" -p "$b" && gh release upload "$TAG" "$b" && echo "subido: $b"
+          done
+          gh release view "$TAG" --json assets --jq '"Ahora " + (.assets | length | tostring) + " ficheros"'
